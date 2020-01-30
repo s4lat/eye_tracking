@@ -12,7 +12,7 @@ class CalibrateWidget(QtWidgets.QWidget):
 		self.ball_y = 0.79
 
 		self.state = 0 # 0 - countdown, +-1-move up/down
-		self.counter = 3
+		self.counter = 10
 
 		self.timer = QtCore.QTimer(self)
 		self.timer.timeout.connect(self.repaint)
