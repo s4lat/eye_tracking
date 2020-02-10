@@ -124,7 +124,7 @@ class Ui(QtWidgets.QWidget):
 		model = Sequential()
 		model.add(Conv2D(16, kernel_size=(3, 3), strides=(1, 1),
 		                 activation='relu',
-		                 input_shape=(cfg.EYES_ROI_H, cfg.EYES_ROI_W, 3)))
+		                 input_shape=(cfg.EYES_ROI_H, cfg.EYES_ROI_W, 1)))
 		model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
 		model.add(Conv2D(16, (3, 3), activation='relu'))
 		model.add(MaxPooling2D(pool_size=(2, 2)))
@@ -137,6 +137,9 @@ class Ui(QtWidgets.QWidget):
 		model.add(Dense(2, activation='sigmoid'))
 
 		model.compile(loss='mean_squared_error', optimizer='adam')
+
+		if len(dataset[0].shape) < 4:
+			dataset[0] = np.reshape(dataset[0], (*(dataset[0].shape), 1))
 
 		history = model.fit(x=dataset[0]/255, 
 			y=dataset[1],
@@ -191,9 +194,10 @@ class Ui(QtWidgets.QWidget):
 				x0, y0 = shapes[17][0], shapes[17][1]
 				x1, y1 = shapes[26][0], shapes[29][1]
 
-				eyes_roi = frame_src[y0:y1, x0:x1]
+				eyes_roi = gray[y0:y1, x0:x1]
 				try:
 					eyes_roi = cv2.resize(eyes_roi, (cfg.EYES_ROI_W, cfg.EYES_ROI_H))
+					eyes_roi = np.reshape(eyes_roi, (*(eyes_roi.shape), 1))
 					cv2.rectangle(frame, (x0, y0), 
 						(x1, y1), (0, 0, 255), 2)
 
@@ -227,8 +231,7 @@ class Ui(QtWidgets.QWidget):
 		self.camLabel.setPixmap(QtGui.QPixmap.fromImage(frame))
 
 		if data['eyes'] is not None:
-			eyes_roi = QtGui.QImage(data['eyes'], data['eyes'].shape[1], data['eyes'].shape[0], data['eyes'].strides[0], QtGui.QImage.Format_RGB888)
-			eyes_roi = eyes_roi.rgbSwapped()
+			eyes_roi = QtGui.QImage(data['eyes'], data['eyes'].shape[1], data['eyes'].shape[0], data['eyes'].strides[0], QtGui.QImage.Format_Grayscale8)
 
 			self.eyes_roi = cv2.resize(data['eyes'], (cfg.EYES_ROI_W, cfg.EYES_ROI_H))
 			self.eyesLabel.setPixmap(QtGui.QPixmap.fromImage(eyes_roi))
@@ -240,7 +243,7 @@ class Ui(QtWidgets.QWidget):
 		self.dataList.clear()
 		self.dataList.addItems(datasets)
 
-		models = [f for f in os.listdir(cfg.MODELS_PATH) if '.DS' not in f]
+		models = [f for f in os.listdir(cfg.MODELS_PATH) if f[0] != '.']
 
 		self.modelsList.clear()
 		self.modelsList.addItems(models)
