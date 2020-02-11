@@ -32,7 +32,7 @@ class Ui(QtWidgets.QWidget):
 
 		self.timer = QtCore.QTimer(self)
 		self.timer.timeout.connect(self.update_widgets)
-		self.timer.start(0)
+		self.timer.start(10)
 
 		self.recordBtn.clicked.connect(self.create_calibration_widget)
 		self.trainModelBtn.clicked.connect(self.init_train_thread)
@@ -106,9 +106,12 @@ class Ui(QtWidgets.QWidget):
 		self.t2.start()
 
 	def create_calibration_widget(self):
+		self.timer.stop()
+
 		res = pyautogui.size()
 		self.calibrate_widget = CalibrateWidget(self, res)
 		self.calibrate_widget.show()
+
 
 	def record_dataset(self):
 		if not self.isRecording:
@@ -119,6 +122,10 @@ class Ui(QtWidgets.QWidget):
 			self.isRecording = False
 			print('Record stopped!')
 			self.save_dataset(self.data, self.labels)
+
+			self.q.queue.clear()
+			self.timer.start()
+
 
 	def train_model(self, dataset):
 		model = Sequential()
@@ -168,6 +175,9 @@ class Ui(QtWidgets.QWidget):
 		screen_size = pyautogui.size()
 		print("SCREEN: %sx%s" % screen_size)
 
+		coords = np.array([[0,0], [0,0], [0,0]])
+		frames_counter = 0
+
 		while True:
 			ret, frame = cap.read()
 	
@@ -198,6 +208,8 @@ class Ui(QtWidgets.QWidget):
 				try:
 					eyes_roi = cv2.resize(eyes_roi, (cfg.EYES_ROI_W, cfg.EYES_ROI_H))
 					eyes_roi = np.reshape(eyes_roi, (*(eyes_roi.shape), 1))
+					self.eyes_roi = eyes_roi.copy()
+
 					cv2.rectangle(frame, (x0, y0), 
 						(x1, y1), (0, 0, 255), 2)
 
@@ -205,20 +217,38 @@ class Ui(QtWidgets.QWidget):
 						pred = self.model.predict(np.expand_dims(eyes_roi/255, 0))[0]
 						x = pred[0] * screen_size[0]
 						y = pred[1] * screen_size[1]
+
+						coords[frames_counter] = [x, y]
+						frames_counter += 1
+
+						if frames_counter == 2:
+							x_avg = np.sum(coords[:, 0])/3
+							y_avg = np.sum(coords[:, 1])/3
+
+							pyautogui.moveTo()
+
+							frames_counter = 0
+
 						pyautogui.moveTo(x, y)
 
-					g = self.eyesLabel.geometry()
-					w, h = g.width(), g.height()
-					out_eyes_roi = cv2.resize(eyes_roi, (w, h))
+
+					if not self.testing and not self.isRecording:
+				# Resizing for output label
+						g = self.eyesLabel.geometry()
+						w, h = g.width(), g.height()
+						out_eyes_roi = cv2.resize(eyes_roi, (w, h))
 						
 				except cv2.error as e:
 					print('[ERROR] Eyes roi is empty!')
-				
-			g = self.camLabel.geometry()
-			w, h = g.width(), g.height()
-			out_frame = cv2.resize(frame, (w, h))
+			
 
-			self.q.put({'frame' : np.copy(out_frame), 'eyes' : np.copy(out_eyes_roi)})
+			if not self.testing and not self.isRecording:
+				# Resizing for output label
+				g = self.camLabel.geometry()
+				w, h = g.width(), g.height()
+				out_frame = cv2.resize(frame, (w, h))
+
+				self.q.put({'frame' : np.copy(out_frame), 'eyes' : np.copy(out_eyes_roi)})
 
 	def update_widgets(self):
 		if self.q.empty():
@@ -233,7 +263,6 @@ class Ui(QtWidgets.QWidget):
 		if data['eyes'] is not None:
 			eyes_roi = QtGui.QImage(data['eyes'], data['eyes'].shape[1], data['eyes'].shape[0], data['eyes'].strides[0], QtGui.QImage.Format_Grayscale8)
 
-			self.eyes_roi = cv2.resize(data['eyes'], (cfg.EYES_ROI_W, cfg.EYES_ROI_H))
 			self.eyesLabel.setPixmap(QtGui.QPixmap.fromImage(eyes_roi))
 
 	def update_lists(self):
@@ -252,8 +281,11 @@ class Ui(QtWidgets.QWidget):
 		if event.key() == QtCore.Qt.Key_Escape:
 			if not self.testing and self.model:
 				self.testing = True
+				self.timer.stop()
 				print('Testing')
 			else:
+				self.q.queue.clear()
+				self.timer.start()
 				self.testing = False
 
 		if event.key() == QtCore.Qt.Key_Shift:
