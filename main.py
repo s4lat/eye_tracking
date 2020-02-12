@@ -110,6 +110,7 @@ class Ui(QtWidgets.QWidget):
 
 		res = pyautogui.size()
 		self.calibrate_widget = CalibrateWidget(self, res)
+		self.record_dataset()
 		self.calibrate_widget.show()
 
 
@@ -129,21 +130,21 @@ class Ui(QtWidgets.QWidget):
 
 	def train_model(self, dataset):
 		model = Sequential()
-		model.add(Conv2D(16, kernel_size=(3, 3), strides=(1, 1),
+		model.add(Conv2D(32, kernel_size=(3, 3), strides=(1, 1),
 		                 activation='relu',
 		                 input_shape=(cfg.EYES_ROI_H, cfg.EYES_ROI_W, 1)))
 		model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-		model.add(Conv2D(16, (3, 3), activation='relu'))
+		model.add(Conv2D(32, (3, 3), activation='relu'))
 		model.add(MaxPooling2D(pool_size=(2, 2)))
 		model.add(Flatten())
-		model.add(Dense(64, activation='relu'))
+		model.add(Dense(256, activation='relu'))
+		model.add(Dropout(0.4))
+		model.add(Dense(256, activation='relu'))
 		model.add(Dropout(0.2))
 		model.add(Dense(64, activation='relu'))
-		model.add(Dropout(0.2))
-		model.add(Dense(64, activation='relu'))
-		model.add(Dense(2, activation='sigmoid'))
+		model.add(Dense(8, activation='softmax'))
 
-		model.compile(loss='mean_squared_error', optimizer='adam')
+		model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 		if len(dataset[0].shape) < 4:
 			dataset[0] = np.reshape(dataset[0], (*(dataset[0].shape), 1))
@@ -151,7 +152,7 @@ class Ui(QtWidgets.QWidget):
 		history = model.fit(x=dataset[0]/255, 
 			y=dataset[1],
 			validation_split=0.0,
-			batch_size=100, 
+			batch_size=20, 
 			epochs=cfg.EPOCHS,
 			verbose=1)
 		print('loss: %s' % (history.history['loss'][-1]))
@@ -174,9 +175,6 @@ class Ui(QtWidgets.QWidget):
 		
 		screen_size = pyautogui.size()
 		print("SCREEN: %sx%s" % screen_size)
-
-		coords = np.array([[0,0], [0,0], [0,0]])
-		frames_counter = 0
 
 		while True:
 			ret, frame = cap.read()
@@ -215,22 +213,13 @@ class Ui(QtWidgets.QWidget):
 
 					if self.testing:
 						pred = self.model.predict(np.expand_dims(eyes_roi/255, 0))[0]
-						x = pred[0] * screen_size[0]
-						y = pred[1] * screen_size[1]
+						# x = pred[0] * screen_size[0]
+						# y = pred[1] * screen_size[1]
 
-						coords[frames_counter] = [x, y]
-						frames_counter += 1
-
-						if frames_counter == 2:
-							x_avg = np.sum(coords[:, 0])/3
-							y_avg = np.sum(coords[:, 1])/3
-
-							pyautogui.moveTo()
-
-							frames_counter = 0
-
+						# pyautogui.moveTo(x, y)
+						x, y = tuple(screen_size * cfg.ball_positions[np.argmax(pred)])
 						pyautogui.moveTo(x, y)
-
+						print("Кнопка %s" % np.argmax(pred))
 
 					if not self.testing and not self.isRecording:
 				# Resizing for output label
