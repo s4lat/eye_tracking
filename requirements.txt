@@ -1,7 +1,7 @@
 opencv_contrib_python==4.1.1.26
 imutils==0.5.3
 PyAutoGUI==0.9.47
-tensorflow==2.0.0
+tensorflow==2.3.1
 numpy==1.14.0
 PyQt5==5.14.1
 dlib==19.19.0
